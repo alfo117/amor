@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>🌻 Puzzle Romántico · Encuentra la frase</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #fef9e7;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            flex-direction: column;
+            padding: 20px;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .game-container {
+            background: rgba(255, 250, 240, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 40px;
+            padding: 30px 20px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+            text-align: center;
+            border: 1px solid #e6d5b8;
+            position: relative;
+        }
+
+        h2 {
+            color: #5a3e28;
+            font-weight: normal;
+            margin-bottom: 10px;
+            font-size: 1.6rem;
+        }
+
+        .hearts {
+            font-size: 2rem;
+            margin: 15px 0;
+            letter-spacing: 5px;
+        }
+
+        .phrase-display {
+            font-size: 1.8rem;
+            letter-spacing: 6px;
+            margin: 25px 0;
+            color: #7a4e2d;
+            font-weight: bold;
+            background: #fff8ed;
+            padding: 12px 15px;
+            border-radius: 30px;
+            display: inline-block;
+            min-width: 200px;
+            border: 1px dashed #d4b68a;
+            word-break: break-word;
+        }
+
+        .keyboard {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 20px;
+        }
+
+        .key {
+            background: #f3e5cd;
+            border: none;
+            width: 45px;
+            height: 50px;
+            border-radius: 16px;
+            font-size: 1.4rem;
+            font-family: 'Georgia', serif;
+            color: #4a2e1a;
+            box-shadow: 0 6px 0 #c9af91;
+            cursor: pointer;
+            transition: all 0.05s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .key:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #c9af91;
+            background: #e6cfaa;
+        }
+
+        .key.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+            box-shadow: 0 2px 0 #c9af91;
+            transform: translateY(2px);
+        }
+
+        .message-area {
+            margin-top: 25px;
+            font-size: 1.1rem;
+            color: #8B4513;
+            min-height: 30px;
+            font-style: italic;
+        }
+
+        .reset-btn {
+            margin-top: 20px;
+            background: none;
+            border: 1px solid #d4b68a;
+            padding: 10px 25px;
+            border-radius: 30px;
+            font-family: 'Georgia', serif;
+            color: #5a3e28;
+            background: #f9ecd4;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        /* Lluvia de flores al ganar */
+        .winner-flower {
+            position: fixed;
+            top: -40px;
+            pointer-events: none;
+            animation: winnerFall linear forwards;
+            z-index: 100;
+            font-size: 2rem;
+        }
+
+        @keyframes winnerFall {
+            0% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(110vh) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 400px) {
+            .key {
+                width: 38px;
+                height: 45px;
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h2>🌼 Descubre la frase secreta</h2>
+        <div class="hearts" id="heartsDisplay">❤️❤️❤️❤️❤️❤️</div>
+        <div class="phrase-display" id="phraseDisplay"></div>
+        <div class="keyboard" id="keyboard"></div>
+        <div class="message-area" id="message"></div>
+        <button class="reset-btn" id="resetBtn">🔄 Jugar de nuevo</button>
+    </div>
+
+    <script>
+        (function() {
+            // ============ CONFIGURACIÓN QUE PUEDES CAMBIAR ============
+            const SECRET_PHRASE = "eres mia";   // frase a adivinar (sin tildes para simplicidad)
+            const MAX_LIVES = 6;
+            const FLOWER_EMOJIS = ['🌻', '🌼', '💛'];  // para lluvia al ganar
+
+            // ===========================================================
+
+            const phraseDisplay = document.getElementById('phraseDisplay');
+            const keyboardDiv = document.getElementById('keyboard');
+            const heartsDisplay = document.getElementById('heartsDisplay');
+            const messageDiv = document.getElementById('message');
+            const resetBtn = document.getElementById('resetBtn');
+
+            let lives = MAX_LIVES;
+            let guessedLetters = new Set();   // letras acertadas
+            let wrongLetters = new Set();     // letras falladas
+            let gameOver = false;
+
+            // Normalizar frase (solo letras y espacios)
+            const normalizedPhrase = SECRET_PHRASE.toUpperCase().replace(/[^A-Z\s]/g, '');
+            const lettersInPhrase = new Set(normalizedPhrase.replace(/\s/g, '').split(''));
+
+            function updateDisplay() {
+                // Construir visualización con guiones bajos para letras no adivinadas
+                let display = '';
+                for (let char of normalizedPhrase) {
+                    if (char === ' ') {
+                        display += '  '; // espacio visible
+                    } else if (guessedLetters.has(char)) {
+                        display += char + ' ';
+                    } else {
+                        display += '_ ';
+                    }
+                }
+                phraseDisplay.textContent = display.trim();
+            }
+
+            function updateHearts() {
+                let heartsHtml = '';
+                for (let i = 0; i < MAX_LIVES; i++) {
+                    heartsHtml += i < lives ? '❤️' : '🖤';
+                }
+                heartsDisplay.innerHTML = heartsHtml;
+            }
+
+            function checkWin() {
+                // Verificar si todas las letras de la frase fueron adivinadas
+                for (let char of lettersInPhrase) {
+                    if (!guessedLetters.has(char)) return false;
+                }
+                return true;
+            }
+
+            function handleWin() {
+                gameOver = true;
+                messageDiv.textContent = '🎉 ¡Lo lograste! "' + SECRET_PHRASE + '"';
+                // Deshabilitar teclado
+                disableAllKeys();
+                // Iniciar lluvia de flores
+                startWinnerFlowers();
+            }
+
+            function handleLoss() {
+                gameOver = true;
+                messageDiv.textContent = '💔 Te quedaste sin corazones... La frase era: "' + SECRET_PHRASE + '"';
+                disableAllKeys();
+                // Revelar frase
+                phraseDisplay.textContent = normalizedPhrase.split('').join(' ').trim();
+            }
+
+            function disableAllKeys() {
+                document.querySelectorAll('.key').forEach(key => key.classList.add('disabled'));
+            }
+
+            function enableAllKeys() {
+                document.querySelectorAll('.key').forEach(key => key.classList.remove('disabled'));
+            }
+
+            function resetGame() {
+                lives = MAX_LIVES;
+                guessedLetters.clear();
+                wrongLetters.clear();
+                gameOver = false;
+                messageDiv.textContent = '';
+                updateHearts();
+                updateDisplay();
+                enableAllKeys();
+                // Eliminar flores existentes
+                document.querySelectorAll('.winner-flower').forEach(f => f.remove());
+            }
+
+            function guessLetter(letter) {
+                if (gameOver) return;
+                if (guessedLetters.has(letter) || wrongLetters.has(letter)) return;
+
+                if (lettersInPhrase.has(letter)) {
+                    guessedLetters.add(letter);
+                    updateDisplay();
+                    if (checkWin()) {
+                        handleWin();
+                    }
+                } else {
+                    wrongLetters.add(letter);
+                    lives--;
+                    updateHearts();
+                    // Marcar tecla como fallida (opcional, ya se deshabilita)
+                    if (lives <= 0) {
+                        handleLoss();
+                    } else {
+                        messageDiv.textContent = '💢 ¡Letra incorrecta! Pierdes un corazón.';
+                    }
+                }
+                // Deshabilitar la tecla presionada
+                const keyElement = document.querySelector(`.key[data-letter="${letter}"]`);
+                if (keyElement) keyElement.classList.add('disabled');
+            }
+
+            function createKeyboard() {
+                const alphabet = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');
+                keyboardDiv.innerHTML = '';
+                alphabet.forEach(letter => {
+                    const btn = document.createElement('button');
+                    btn.className = 'key';
+                    btn.textContent = letter;
+                    btn.dataset.letter = letter;
+                    btn.addEventListener('click', () => guessLetter(letter));
+                    // Soporte táctil mejorado
+                    btn.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        guessLetter(letter);
+                    });
+                    keyboardDiv.appendChild(btn);
+                });
+            }
+
+            // Lluvia de flores al ganar (similar al otro proyecto)
+            function startWinnerFlowers() {
+                const interval = setInterval(() => {
+                    if (!gameOver) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    const flower = document.createElement('div');
+                    flower.className = 'winner-flower';
+                    flower.textContent = FLOWER_EMOJIS[Math.floor(Math.random() * FLOWER_EMOJIS.length)];
+                    flower.style.left = Math.random() * 100 + 'vw';
+                    flower.style.animationDuration = (2 + Math.random() * 3) + 's';
+                    flower.style.fontSize = (1.5 + Math.random() * 2) + 'rem';
+                    document.body.appendChild(flower);
+
+                    flower.addEventListener('animationend', () => {
+                        flower.remove();
+                    });
+                }, 250);
+
+                // Detener después de 6 segundos
+                setTimeout(() => clearInterval(interval), 6000);
+            }
+
+            // Reset
+            resetBtn.addEventListener('click', resetGame);
+
+            // Iniciar
+            createKeyboard();
+            resetGame();
+        })();
+    </script>
+</body>
+</html>
